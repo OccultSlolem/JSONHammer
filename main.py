@@ -314,6 +314,9 @@ with open(f"{OUTPUT_DIR}/ipfs_paths.txt", "w") as f:
     # Write to file
         f.write(f"{generated_ipfs_links[i]}\n")
 
-log.debug(generated_ipfs_links)
+if len(generated_ipfs_links) <= 30:
+    log.info("IPFS links:")
+    log.info("---------")
+    log.info(generated_ipfs_links)
 log.info("Done!")
 log.info("You can find the IPFS links in ipfs_paths.txt")

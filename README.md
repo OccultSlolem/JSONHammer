@@ -2,12 +2,11 @@
 
 ### Command line arguments:
 
-``-c [num]``: Copies. Overrides value in settings.json.
-``-o [url]``: Gateway URL. Overrides value in settings.json.
-
-``-o [directory name]``: Output directory.
-``-t [num]``: Max threads. Ie maximum upload tasks.
-``-d``: Debug. Turns on more verbose printing.
+- ``-c [num]``: Copies. Overrides value in settings.json.
+- ``-o [url]``: Gateway URL. Overrides value in settings.json.
+- ``-o [directory name]``: Output directory.
+- ``-t [num]``: Max threads. Ie maximum upload tasks.
+- ``-d``: Debug. Turns on more verbose logging.
 
 ### settings.json:
 
