@@ -1,0 +1,21 @@
+{
+    "ipfsgateway": "https://ipfs.infura.io:5001/api/v0/add?pin=false",
+    "apiKey": "redacted",
+    "apiSecret": "redacted",
+
+    "copies": 30,
+    "uploadImage": true,
+    "uploadJson": true,
+
+    "template": {
+        "spritesheet": "IMG_FROM_ASSETS:spritesheet",
+        "displayimage": "IMG_FROM_ASSETS:displayimage",
+        "name": "RANDOM_FROM_ASSETS_JSON:names",
+        "description": "RANDOM_FROM_ASSETS_JSON:descriptions",
+        "body": "RANDOM_FROM_ASSETS_JSON:colors",
+        "wheels": "RANDOM_FROM_ASSETS_JSON:colors",
+        "spoiler": "RANDOM_FROM_ASSETS_JSON:colors",
+        "turbo": "RANDOM_FROM_ASSETS_JSON:colors"
+    }
+}
+
