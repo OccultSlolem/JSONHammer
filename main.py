@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import time
 import random
 import base64
 import logging
@@ -52,12 +53,15 @@ JSON Hammer v1.0.0
 # ---------------------
 
 def upload_to_ipfs(file_path, putPath = False):
+    if DEBUG_PRINTS: log.debug(f"Uploading {file_path} to IPFS...")
     with open(file_path, "rb") as f:
         creds = base64.b64encode(bytes(apiKey, "utf-8") + b":" + bytes(apiSecret, "utf-8")).decode("utf-8")
         headers = {
             "Authorization": f"Basic {creds}",
         }
-        r = requests.post("https://ipfs.infura.io:5001/api/v0/add?pin=false", headers=headers, files={"file": f.read()})
+        IPFS_GATEWAY = "https://ipfs.infura.io:5001/api/v0/add?pin=false"
+        # log.debug(f"GATEWAY: {IPFS_GATEWAY}")
+        r = requests.post(IPFS_GATEWAY, headers=headers, files={"file": f.read()})
         if r.status_code == 200:
             hash = r.json()["Hash"]
             if putPath: generated_ipfs_links.append(f"ipfs://{hash}")
@@ -86,8 +90,8 @@ def create_json_file(json_data, file_name):
         json.dump(json_data, file)
         if DEBUG_PRINTS: log.debug(f"Created JSON file {file_name}")
 
-def process_line(line):
-    if DEBUG_PRINTS: log.debug(f"Processing line: {line}")
+def process_line(line, indexes = {}):
+    if DEBUG_PRINTS: log.debug(f"Processing line: {line} with indexes: {indexes}")
     if (type(line)) == str:
         try:
             index = line.index(':')
@@ -95,7 +99,7 @@ def process_line(line):
             return line
         possible_cmd = line[0:index]
         if possible_cmd in TEMPLATE_COMMANDS:
-            return TEMPLATE_COMMANDS[possible_cmd](line[index+1:])
+            return TEMPLATE_COMMANDS[possible_cmd](line[index+1:], indexes)
     if (type(line)) == list:
         return [process_line(item) for item in line]
     if (type(line)) == dict:
@@ -104,11 +108,16 @@ def process_line(line):
 
 # Iterates over a JSON object and calls process_line on each value.
 def iterate_json_object(object):
+    RANDOMINDEXES = {} # Used for pick_from_assets_index
+
     if DEBUG_PRINTS: log.debug(f"Iterating over JSON object: {object}")
     processed = object
     keys = list(object.keys())
     for key in keys:
-        processed[key] = process_line(object[key])
+        response = process_line(object[key], RANDOMINDEXES)
+        # response = [processed output, new random indexes]
+        processed[key] = response[0]
+        RANDOMINDEXES = {**RANDOMINDEXES, **response[1]}
     return processed
 
 # ---------------------
@@ -116,7 +125,7 @@ def iterate_json_object(object):
 
 # IMG_FROM_ASSETS:assets/asset_directory
 # Picks a random image from assets/assets_directory and returns the path to it.
-def image_from_assets(asset):
+def image_from_assets(asset, indexes = {}):
     if DEBUG_PRINTS: log.debug(f"IMG_FROM_ASSETS:{asset}")
     if not type(asset) == str:
         log.fatal("Invalid asset supplied. Exiting.")
@@ -134,15 +143,58 @@ def image_from_assets(asset):
     # pick random image
     image = random.choice(images)
     if not UPLOAD_IMAGES_TO_IPFS:
-        return f"assets/{asset}/{image}"
+        return [f"assets/{asset}/{image}", indexes]
+
+    return [upload_to_ipfs(f"assets/{asset}/{image}"), indexes]
+
+def pick_from_assets_index(args, indexes = {}):
+    """Picks a random item from assets/assets_directory/index.txt and returns it."""
+    """Stores the random value in RANDOMS so it can be used later."""
+    args = args.split(",")
+    asset = args[0]
+    index = args[1]
+
+    if DEBUG_PRINTS: log.debug(f"**PICK_FROM_ASSETS_WITHINDEX:{asset}:{index}")
+    if not type(asset) == str:
+        log.fatal("Invalid asset supplied. Exiting.")
+        exit()
+    if not type(index) == str:
+        log.fatal("Invalid index supplied. Exiting.")
+        exit()
+    if not os.path.isdir(f"assets/{asset}"):
+        log.fatal(f"assets/{asset} is not a directory. Exiting.")
+        log.info(f"Hint: Make sure assets/{asset} is a folder containing one or more images.")
+        exit()
+    images = os.listdir(f"assets/{asset}")
+    if len(images) == 0:
+        log.fatal(f"assets/{asset} is empty. Exiting.")
+        log.info(f"Hint: Make sure assets/{asset} is a folder containing one or more images.")
+        exit()
+    images.sort()
     
-    # upload to IPFS
-    log.info(f"Uploading {image} to IPFS...")
-    return upload_to_ipfs(f"assets/{asset}/{image}")
+    if not index in indexes:
+        indexKey = index
+        indexVal = random.randint(0, len(images)-1)
+        indexes[indexKey] = indexVal
+        if (DEBUG_PRINTS): log.info(f"Added {indexKey}:{indexVal} to RANDOMS")
+    
+    
+    try:
+        log.debug(images)
+        image = images[indexes[index]]
+        # log.info("assets/" + asset + "/" + image)
+
+        if not UPLOAD_IMAGES_TO_IPFS:
+            return [f"assets/{asset}/{image}", indexes]
+        
+        return [upload_to_ipfs(f"assets/{asset}/{image}"), indexes]
+    except IndexError:
+        log.fatal(f"Index {RANDOMS[index]} out of range for assets/{asset}. Exiting.")
+        exit()
 
 # RANDOM_FROM_ASSETS_JSON:assets/asset_directory.json
 # Picks a random item from assets/assets_directory.json and returns it.
-def pick_from_json_array(json_array_path):
+def pick_from_json_array(json_array_path, indexes = {}):
     if not json_array_path.endswith(".json"):
         json_array_path += ".json"
 
@@ -153,7 +205,7 @@ def pick_from_json_array(json_array_path):
         exit()
     if json_array_path in json_cache:
         if (DEBUG_PRINTS): log.debug(f"Using cached JSON array {json_array_path}.")
-        return random.choice(json_cache[json_array_path])
+        return [random.choice(json_cache[json_array_path]), indexes]
     
     if (DEBUG_PRINTS): log.debug(f"Loading JSON array {json_array_path} from file.")
     with open(f"assets/{json_array_path}") as f:
@@ -167,15 +219,25 @@ def pick_from_json_array(json_array_path):
         log.fatal(f"assets/{json_array_path} is empty. Exiting.")
         exit()
     json_cache[json_array_path] = json_array
-    return random.choice(json_array)
+    return [random.choice(json_array), indexes]
 
 TEMPLATE_COMMANDS = {
-    "IMG_FROM_ASSETS": lambda dir: image_from_assets(dir),
-    "RANDOM_FROM_ASSETS_JSON": lambda path: pick_from_json_array(path)
+    "IMG_FROM_ASSETS": lambda dir, indexes: image_from_assets(dir, indexes),
+    "RANDOM_FROM_ASSETS_JSON": lambda path, indexes: pick_from_json_array(path, indexes),
+    "PICK_FROM_ASSETS_WITHINDEX": lambda args, indexes: pick_from_assets_index(args, indexes)
 }
 
 # ---------------------
-# Main:
+# Validation:
+
+if "-h" in sys.argv or "--help" in sys.argv:
+    log.info("Usage: python3 main.py [bold red][-m MAX_THREADS] [-o OUTPUT_DIR] [-c COPIES] [-h] [--help][/bold red]")
+    log.info("  -m MAX_THREADS: The maximum number of threads to use. Default is 30.")
+    log.info("  -o OUTPUT_DIR: The directory to output the generated files to. Default is ./out.")
+    log.info("  -c COPIES: The number of copies to generate. Default is 1.")
+    log.info("  -h, --help: Show this help message.")
+    log.info("  See README.md for more information.")
+    exit()
 
 if not os.path.exists('./settings.json'):
     log.fatal("No settings.json file found. Exiting.")
@@ -192,7 +254,6 @@ if "-m" in sys.argv:
     MAX_THREADS = int(threads)
 if "-o" in sys.argv:
     dir = sys.argv[sys.argv.index("-o") + 1]
-    create_dir_if_not_exists(dir)
     OUTPUT_DIR = dir
 if "-c" in sys.argv:
     copies = sys.argv[sys.argv.index("-c") + 1]
@@ -241,7 +302,6 @@ if "maxThreads" in settings and not "-t" in sys.argv:
     MAX_THREADS = settings["maxThreads"]
 
 if "outputDir" in settings and not "-o" in sys.argv:
-    create_dir_if_not_exists(settings["outputDir"])
     OUTPUT_DIR = settings["outputDir"]
 
 if not "template" in settings:
@@ -270,7 +330,7 @@ if UPLOAD_IMAGES_TO_IPFS or UPLOAD_JSON_TO_IPFS:
     apiSecret = settings["apiSecret"]
 
 def create_copy(i):
-    log.info(f"Creating copy {i + 1} of {COPIES}...")
+    if DEBUG_PRINTS: log.debug(f"Creating copy {i + 1} of {COPIES}...")
     with open('./settings.json') as f:
         settings = json.load(f)
     current = settings["template"]
@@ -280,7 +340,7 @@ def create_copy(i):
     # Write to file
     with open(path, "w") as f:
         json.dump(current, f)
-        log.info(f"JSON written to {path}.json")
+        if DEBUG_PRINTS: log.debug(f"JSON written to {path}.json")
         generated_json_paths.append(path)
 
 # ---------------------
@@ -292,20 +352,17 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
     for i in range(0, COPIES):
         futures.append(executor.submit(create_copy, i))
 
-if not UPLOAD_JSON_TO_IPFS:
-    log.info("Done!")
-    exit()
+if UPLOAD_JSON_TO_IPFS:
+    log.info("--------")
+    log.info("Uploading JSON to IPFS...")
 
-log.info("--------")
-log.info("Uploading JSON to IPFS...")
+    futures = []
 
-futures = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_THREADS) as executor2:
+        for i in range(0, len(generated_json_paths)):
+            futures.append(executor2.submit(upload_to_ipfs, generated_json_paths[i], True))
 
-with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_THREADS) as executor2:
-    for i in range(0, len(generated_json_paths)):
-        futures.append(executor2.submit(upload_to_ipfs, generated_json_paths[i], True))
-
-concurrent.futures.wait(futures)
+concurrent.futures.wait(futures, return_when="FIRST_EXCEPTION")
 
 with open(f"{OUTPUT_DIR}/ipfs_paths.txt", "w") as f:
     f.write("\n---------\n")
