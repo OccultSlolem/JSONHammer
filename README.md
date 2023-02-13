@@ -13,21 +13,24 @@
 **Directives:**
 - `PICK_FROM_ASSETS_WITHINDEX:[index],[dirname]`: Selects index from assets/filename. Filename must point to a directory containing several files. Index must start with an alphabetic character. Index will be randomly assigned, which you can then reuse to get consistency across multiple randomly generated files. For instance, if I have
 
-assets
- - spritesheets
-  - Spritesheet0.png
-  - Spritesheet1.png
-  - Spritesheet2.png
- - displayimage
-  - DisplayImage0.png
-  - DisplayImage1.png
-  - DisplayImage2.png
+- assets
+  - spritesheets
+    - Spritesheet0.png
+    - Spritesheet1.png
+    - Spritesheet2.png
+  - displayimage
+    - DisplayImage0.png
+    - DisplayImage1.png
+    - DisplayImage2.png
 
-I could put in the template:
+I could put in settings.json:
 ```json
-template: {
-    "displayImage": "PICK_FROM_ASSETS_WITHINDEX:displayimage,x",
-    "spritesheet": "PICK_FROM_ASSETS_WITHINDEX:spritesheets,x"
+{
+  ...
+  "template": {
+   "displayImage": "PICK_FROM_ASSETS_WITHINDEX:displayimage,x",
+   "spritesheet": "PICK_FROM_ASSETS_WITHINDEX:spritesheets,x"
+  }
 }
 ```
 
